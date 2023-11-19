@@ -11,15 +11,13 @@ import (
         "time"
 )
 
-var (
-        fw                     = flag.String("forward", "127.0.0.1:2000~127.0.0.1:3000", "can be multiple: from~to[,from~to[,from~to]]")
-        xorFlag                = flag.Int("xor", 0, "the xor value for simple encode, only using the first 8 bits.")
-        maxLen                 = flag.Int("max-len", 0x7fffffff, "the max length of xor from the package beginning")
-        sessionTimeoutByRemoteOnly = flag.Bool("session-timeout-by-remote-only", false, "session timeout by remote reply only")
-        timeout                = flag.Duration("timeout", 30*time.Second, "session timeout, set to 0 for no timeout")
-        bufferSize             = flag.Int("buffer-size", 1600, "buffer size in bytes, the max UDP package size.")
-        verboseLogging         = flag.Bool("verbose", false, "verbose logging")
-)
+var fw = flag.String("forward", "127.0.0.1:2000~127.0.0.1:3000", "can be multiple: from~to[,from~to[,from~to]]")
+var xorFlag = flag.Int("xor", 0, "the xor value for simple encode, only using first 8 bit.")
+var maxLen = flag.Int("max-len", 0x7fffffff, "the max length of xor from the package beginning")
+var sessionTimeoutByRemoteOnly = flag.Bool("session-timeout-by-remote-only", false, "session timeout by remote reply only")
+var timeout = flag.Int("timeout", 30, "session timeout in seconds")
+var bufferSize = flag.Int("buffer-size", 1600, "buffer size in bytes, the max UDP package size.")
+var verboseLogging = flag.Bool("verbose", false, "verbose logging")
 
 // Session is the UDP session info
 type Session struct {
@@ -27,13 +25,13 @@ type Session struct {
         serverConn *net.UDPConn
 }
 
-// Forwarder is the info for forwarding
+// Forwarder is the info of forwarder
 type Forwarder struct {
         fromAddr  *net.UDPAddr
         toAddr    *net.UDPAddr
         localConn *net.UDPConn
         sessions  map[string]*Session
-        mutex     sync.RWMutex // Mutex for protecting sessions
+        mu        sync.Mutex // Mutex to protect sessions map
 }
 
 func xor(data []byte, n int) []byte {
@@ -54,13 +52,7 @@ func handleSession(f *Forwarder, key string, session *Session) {
         log.Printf("%s started", key)
         data := make([]byte, *bufferSize)
         for {
-                // Check if the timeout is set to 0 (no timeout)
-                var deadline time.Time
-                if *timeout > 0 {
-                        deadline = time.Now().Add(*timeout)
-                }
-
-                session.serverConn.SetReadDeadline(deadline)
+                session.serverConn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(*timeout)))
                 if n, _, err := session.serverConn.ReadFromUDP(data); err != nil {
                         log.Printf("Error while read from server, %s", err)
                         break
@@ -71,10 +63,9 @@ func handleSession(f *Forwarder, key string, session *Session) {
                         verbosePrintf("Sent %d bytes to %s\n", n, session.clientAddr.String())
                 }
         }
-
-        f.mutex.Lock()
-        delete(f.sessions, key) // Remove session and unlock
-        f.mutex.Unlock()
+        f.mu.Lock()
+        delete(f.sessions, key)
+        f.mu.Unlock()
         log.Printf("%s ended", key)
 }
 
@@ -90,39 +81,32 @@ func receivingFromClient(f *Forwarder) {
                 verbosePrintf("<%s> size: %d\n", clientAddr, n)
                 key := clientAddr.String()
 
-                f.mutex.RLock()
-                session, found := f.sessions[key]
-                f.mutex.RUnlock()
-
-                if found {
+                f.mu.Lock()
+                if session, found := f.sessions[key]; found {
                         verbosePrintf("(old) Write to %s\n", f.toAddr.String())
                         _, err := session.serverConn.Write(data[:n])
                         if err != nil {
                                 log.Printf("Error while write to server, %s", err)
                         }
-                        if !*sessionTimeoutByRemoteOnly && *timeout > 0 {
-                                session.serverConn.SetReadDeadline(time.Now().Add(*timeout))
+                        if !*sessionTimeoutByRemoteOnly {
+                                session.serverConn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(*timeout)))
                         }
+                } else if serverConn, err := net.DialUDP("udp", nil, f.toAddr); err == nil {
+                        log.Printf("(new) Write to %s\n", f.toAddr.String())
+                        _, err := serverConn.Write(data[:n])
+                        if err != nil {
+                                log.Printf("Error while write to server (init), %s", err)
+                        }
+                        session := Session{
+                                clientAddr: clientAddr,
+                                serverConn: serverConn,
+                        }
+                        f.sessions[key] = &session
+                        go handleSession(f, key, &session)
                 } else {
-                        serverConn, err := net.DialUDP("udp", nil, f.toAddr)
-                        if err == nil {
-                                log.Printf("(new) Write to %s\n", f.toAddr.String())
-                                _, err := serverConn.Write(data[:n])
-                                if err != nil {
-                                        log.Printf("Error while write to server (init), %s", err)
-                                }
-                                session := Session{
-                                        clientAddr: clientAddr,
-                                        serverConn: serverConn,
-                                }
-                                f.mutex.Lock()
-                                f.sessions[key] = &session // Add session and unlock
-                                f.mutex.Unlock()
-                                go handleSession(f, key, &session)
-                        } else {
-                                log.Printf("Error while creating server conn, %s", err)
-                        }
+                        log.Printf("Error while create server conn, %s", err)
                 }
+                f.mu.Unlock()
         }
 }
 
@@ -147,7 +131,6 @@ func forward(from string, to string) (*Forwarder, error) {
                 toAddr:    toAddr,
                 localConn: localConn,
                 sessions:  make(map[string]*Session),
-                mutex:     sync.RWMutex{},
         }
 
         log.Printf("<%s> forward to <%s>\n", fromAddr.String(), toAddr.String())
@@ -181,7 +164,7 @@ func main() {
                 }
                 _, err := forward(fromAndTo[0], fromAndTo[1])
                 if err != nil {
-                        log.Printf("Error while creating fw, %s", err)
+                        log.Printf("Error while create fw, %s", err)
                         break
                 }
         }
