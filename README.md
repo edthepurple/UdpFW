@@ -19,3 +19,6 @@ keepalive 5 120
 tun-mtu 1280
 
 in your server.conf
+
+you can increase buffer-size up to 2048 but I do not recommend more than that because your germany server will be automatically blocked by DPI.
+do not decrease the xor value below 8 or you will face packet loss.
