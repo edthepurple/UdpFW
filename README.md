@@ -15,8 +15,8 @@ Usage:
 if you're using wireguard, make sure to set MTU to 1280 and if you're using openvpn make sure to set
 
 keepalive 5 120
-
-tun-mtu 1280
+tun-mtu 1500
+mssfix 1420
 
 in your server.conf
 
