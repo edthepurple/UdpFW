@@ -81,7 +81,7 @@ func receivingFromClient(f *Forwarder) {
 		}
 		xor(data, n)
 		verbosePrintf("<%s> size: %d\n", clientAddr, n)
-		key := clientAddr.String()
+		key := clientAddr.String() + ":" + strconv.Itoa(clientAddr.Port)
 		mu.Lock()
 		session, found := f.sessions[key]
 		mu.Unlock()
