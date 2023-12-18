@@ -6,11 +6,11 @@ Usage:
 
 (server side, for example hetzner where your vpn server is on port 8443)
 
-./udp2xor -forward 0.0.0.0:8444~127.0.0.1:8443 -xor 8 -timeout 120
+./udp2xor -forward 0.0.0.0:8444~127.0.0.1:8443 -xor 8 -timeout 120 -buffer-size 2048
 
 (client side, for example Iran)
 
-./udp2xor -forward 0.0.0.0:8443~x.x.x.x:8444 where x.x.x.x is the ip of your germany server
+./udp2xor -forward 0.0.0.0:8443~x.x.x.x:8444 -xor 8 -timeout 120 -buffer-size 2048 (where x.x.x.x is the ip of your germany server)
 
 if you're using wireguard, make sure to set MTU to 1280 and if you're using openvpn make sure to set
 
