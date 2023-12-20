@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"strconv"
+	"fmt"
 )
 
 var (
@@ -82,7 +82,7 @@ func receivingFromClient(f *Forwarder) {
 		}
 		xor(data, n)
 		verbosePrintf("<%s> size: %d\n", clientAddr, n)
-		key := clientAddr.String() + ":" + strconv.Itoa(clientAddr.Port)
+		key := fmt.Sprintf("%s:%d", clientAddr.IP.String(), clientAddr.Port)
 		mu.Lock()
 		session, found := f.sessions[key]
 		mu.Unlock()
