@@ -50,6 +50,12 @@ func (f *Forwarder) deleteSession(key string) {
     delete(f.sessions, key)
 }
 
+func xorEncryptDecrypt(data []byte, key byte) {
+    for i := 0; i < len(data); i++ {
+        data[i] ^= key
+    }
+}
+
 func handleSession(f *Forwarder, key string, session *Session, timeout time.Duration) {
     log.Printf("%s started", key)
     data := make([]byte, 1600) // Fixed buffer size
@@ -61,6 +67,9 @@ func handleSession(f *Forwarder, key string, session *Session, timeout time.Dura
             break
         }
 
+        // Encrypt received data before forwarding
+        xorEncryptDecrypt(data[:n], 0xAB) // Use any desired key
+        
         _, err = f.localConn.WriteToUDP(data[:n], session.clientAddr)
         if err != nil {
             log.Printf("Error while writing to client: %s", err)
