@@ -58,7 +58,7 @@ func xorEncryptDecrypt(data []byte, key byte) {
 
 func handleSession(f *Forwarder, key string, session *Session, timeout time.Duration) {
     log.Printf("%s started", key)
-    data := make([]byte, 1600) // Fixed buffer size
+    data := make([]byte, 1500) // Fixed buffer size
 
     for {
         n, _, err := session.serverConn.ReadFromUDP(data)
@@ -105,7 +105,7 @@ func checkInactiveSessions(f *Forwarder, timeout time.Duration) {
 }
 
 func receivingFromClient(f *Forwarder, timeout time.Duration) {
-    data := make([]byte, 1600) // Fixed buffer size
+    data := make([]byte, 1500) // Fixed buffer size
     for {
         n, clientAddr, err := f.localConn.ReadFromUDP(data)
         if err != nil {
